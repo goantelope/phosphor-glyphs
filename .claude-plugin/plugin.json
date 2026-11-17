@@ -1,0 +1,1 @@
+{ "name": "phosphor-glyphs", "version": "0.4.0", "description": "A theme from the turntable display's glyph visualizer: amber phosphor colors and a glyph backdrop that moves with what the session is doing.", "types": "./types/index.d.ts" }

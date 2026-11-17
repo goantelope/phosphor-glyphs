@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phosphor Glyphs preview</title>
+<style>
+  :root { --bg:#0e0b07; --panel:#16120c; --text:#ffe6c2; --muted:#b99a6a; --accent:#ffa82c; --line:#3a2f20; }
+  body.light { --bg:#ece8dd; --panel:#f2efe6; --text:#1c160d; --muted:#5f5240; --line:#cfc6b2; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text);
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow:hidden; }
+  #stage { position:fixed; inset:0; }
+  #stage svg { width:100%; height:100%; display:block; }
+  #glass { position:fixed; left:50%; top:8%; bottom:150px; width:min(720px, 90vw); transform:translateX(-50%);
+    border-radius:14px; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    background:color-mix(in srgb, var(--panel) 72%, transparent); padding:24px; display:none; }
+  body.glass #glass { display:block; }
+  #glass p { margin:0 0 12px; } #glass code { color:var(--accent); }
+  #bar { position:fixed; left:0; right:0; bottom:0; padding:10px 16px 14px; display:flex; flex-wrap:wrap; gap:8px 18px;
+    align-items:center; background:color-mix(in srgb, var(--bg) 88%, transparent); border-top:1px solid var(--line); }
+  .grp { display:flex; gap:4px; align-items:center; }
+  .grp > span { color:var(--muted); margin-right:4px; }
+  button { font:inherit; color:var(--text); background:transparent; border:1px solid var(--line); border-radius:6px;
+    padding:4px 9px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#1c160d; border-color:var(--accent); }
+  #status { flex-basis:100%; color:var(--muted); }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="glass">
+  <p><b>How it reads behind the chat</b></p>
+  <p>This panel mimics the app's glass (blur 18, 72% opacity) so you can judge whether the backdrop stays quiet enough behind text.</p>
+  <p>Edited <code>hooks/register.tsx</code> and ran <code>claude plugin test</code>. All checks passed.</p>
+</div>
+<div id="bar">
+  <div class="grp"><span>Tour</span><button id="tour">▶ Play tour</button></div>
+  <div class="grp" id="levels"><span>Level</span></div>
+  <div class="grp" id="agents"><span>Subagents</span></div>
+  <div class="grp" id="events"><span>Event</span></div>
+  <div class="grp"><span>View</span><button id="light">Light</button><button id="glassBtn">Glass panel</button></div>
+  <div id="status"></div>
+</div>
+<script type="module">
+const { AGENTS, BASE, BASE_CSS, CYCLE, DEFS, GATHER, H, OVERLAY, W } = await import('./' + (new URLSearchParams(location.search).get('s') || 'scenes') + '.js')
+
+// Same as compose() in hooks/register.tsx.
+const GATHER_MS = 2600, ONE_SHOT_MS = 3200
+function compose(look, now) {
+  const s = ms => `${(-ms / 1000).toFixed(2)}s`
+  const o = s(now % (CYCLE * 1000))
+  const sinceLevel = now - look.levelAt, sinceOverlay = now - look.overlayAt
+  const base = BASE[look.level] ?? BASE[0]
+  const isChanging = sinceLevel < GATHER_MS && look.from !== look.level
+  const isGathering = look.level > look.from
+  const swarm = isChanging ? GATHER[isGathering ? look.level : look.from] : undefined
+  const isOneShot = look.overlay === 'error' || look.overlay === 'done'
+  const overlay = isOneShot && sinceOverlay > ONE_SHOT_MS ? OVERLAY.none : OVERLAY[look.overlay]
+  const agents = AGENTS.slice(0, look.agents)
+  const css = [BASE_CSS, base.css, swarm?.css ?? '', ...agents.map(a => a.css), overlay.css].join('')
+  const body = [
+    `<g class="${isChanging ? 'fi' : ''}" style="--e:${s(sinceLevel)}">${base.body}</g>`,
+    swarm ? `<g class="${isGathering ? '' : 'gs'}" style="--e:${s(sinceLevel)}">${swarm.body}</g>` : '',
+    agents.map(a => a.body).join(''),
+    `<g style="--e:${s(sinceOverlay)}">${overlay.body}</g>`,
+  ].join('')
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" style="--o:${o};--e:0s">` +
+    `<style>${css}</style>${DEFS}${body}</svg>`
+}
+
+const NAMES = ['Dust (idle)', 'Spiral arms', 'Weather Map', 'Glyph Ring']
+const look = { level: 0, from: 0, levelAt: 0, overlay: 'none', overlayAt: 0, agents: 0 }
+const stage = document.getElementById('stage')
+let pending = []
+
+function draw() {
+  stage.innerHTML = compose(look, Date.now())
+  document.querySelectorAll('#levels button').forEach((b, i) => b.classList.toggle('on', i === look.level))
+  document.querySelectorAll('#agents button').forEach((b, i) => b.classList.toggle('on', i === look.agents))
+  document.querySelectorAll('#events button').forEach(b => b.classList.toggle('on', b.dataset.o === look.overlay))
+  document.getElementById('status').textContent =
+    `${NAMES[look.level]} · ${look.agents} subagent${look.agents === 1 ? '' : 's'} · event: ${look.overlay}`
+}
+// the app redraws when the state changes; redraw once more after the swarm / one-shot ends
+function later(ms) { pending.push(setTimeout(draw, ms)) }
+
+function setLevel(l) {
+  if (l === look.level) return
+  Object.assign(look, { from: look.level, level: l, levelAt: Date.now() }); draw(); later(GATHER_MS + 50)
+}
+function setAgents(n) { look.agents = n; draw() }
+function setOverlay(o) {
+  Object.assign(look, { overlay: o, overlayAt: Date.now() }); draw()
+  if (o === 'error' || o === 'done') later(ONE_SHOT_MS + 50)
+}
+
+const mk = (parent, label, fn, data) => {
+  const b = document.createElement('button'); b.textContent = label; b.onclick = () => { stopTour(); fn() }
+  if (data) b.dataset.o = data
+  document.getElementById(parent).append(b)
+}
+NAMES.forEach((n, i) => mk('levels', `${i} ${n}`, () => setLevel(i)))
+for (let n = 0; n <= 6; n++) mk('agents', String(n), () => setAgents(n))
+for (const o of ['none', 'scan', 'write', 'run', 'error', 'done']) mk('events', o, () => setOverlay(o), o)
+
+document.getElementById('light').onclick = e => { document.body.classList.toggle('light'); e.target.classList.toggle('on') }
+document.getElementById('glassBtn').onclick = e => { document.body.classList.toggle('glass'); e.target.classList.toggle('on') }
+
+// A scripted session: idle, a turn that ramps up with subagents and tools, then winds down.
+const TOUR = [
+  [0, () => { setLevel(0); setAgents(0); setOverlay('none') }],
+  [6000, () => setLevel(1)],
+  [2000, () => setOverlay('scan')],
+  [5000, () => setOverlay('write')],
+  [4000, () => setLevel(2)],
+  [3000, () => setOverlay('run')],
+  [5000, () => setAgents(1)],
+  [2500, () => setAgents(2)],
+  [3000, () => setLevel(3)],
+  [3000, () => setAgents(3)],
+  [5000, () => setOverlay('error')],
+  [4000, () => setOverlay('write')],
+  [4000, () => setAgents(1)],
+  [2000, () => setLevel(2)],
+  [5000, () => setAgents(0)],
+  [1500, () => setLevel(1)],
+  [5000, () => { setLevel(0); setOverlay('done') }],
+  [8000, () => {}],
+]
+let tourTimers = []
+function stopTour() { tourTimers.forEach(clearTimeout); tourTimers = []; document.getElementById('tour').textContent = '▶ Play tour' }
+document.getElementById('tour').onclick = () => {
+  if (tourTimers.length) return stopTour()
+  document.getElementById('tour').textContent = '■ Stop tour'
+  let t = 0
+  for (const [dt, fn] of TOUR) { t += dt; tourTimers.push(setTimeout(fn, t)) }
+  tourTimers.push(setTimeout(stopTour, t + 10))
+}
+// ?level=2&agents=1&overlay=run&bare: a fixed scene, for measuring
+const q = new URLSearchParams(location.search)
+if (q.has('level')) Object.assign(look, { level: +q.get('level'), from: +q.get('level') })
+if (q.has('agents')) look.agents = +q.get('agents')
+if (q.has('overlay')) look.overlay = q.get('overlay')
+if (q.has('bare')) document.getElementById('bar').style.display = 'none'
+if (q.has('glass')) document.body.classList.add('glass')
+draw()
+</script>
+</body>
+</html>

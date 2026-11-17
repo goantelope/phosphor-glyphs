@@ -1,0 +1,5 @@
+{
+  "name": "phosphor-glyphs",
+  "owner": { "name": "goantelope" },
+  "plugins": [{ "name": "phosphor-glyphs", "source": "./" }]
+}
