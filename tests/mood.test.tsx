@@ -46,3 +46,27 @@ test('idle is dust; work and subagents organise the field; events set the overla
   expect(look()?.level).toBe(0)
   expect(look()?.overlay).toBe('done')
 })
+
+for (const [env, where, phosphor] of [
+  [{}, 'local', 'paper'],
+  [{ SSH_CONNECTION: '10.0.0.2 52000 10.0.0.9 22' }, 'ssh', 'mint'],
+  [{ CLAUDE_CODE_REMOTE: 'true' }, 'cloud', 'cobalt'],
+] as const) {
+  test(`a session ${where} takes ${phosphor}`, { options: { thisComputer: 'paper' } }, async ($, on) => {
+    let stored: Record<string, unknown> = {}
+    on('env.get', (_, e) => ({ value: (env as Record<string, string>)[(e as { name: string }).name] }))
+    on('state.get', (_, e) => {
+      const key = (e as { key: string }).key
+      return { value: key in stored ? { value: stored[key], version: 1 } : {} }
+    })
+    on('state.set', (_, e) => {
+      const { key, value } = e as { key: string; value: unknown }
+      stored = { ...stored, [key]: value }
+      return { value: { isSet: true, version: 1 } }
+    })
+    on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+    await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+    expect(stored.place).toEqual({ where, phosphor })
+  })
+}

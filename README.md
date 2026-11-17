@@ -47,6 +47,19 @@ Measured in headless Chrome with software rendering, at 1728×1117 @2x with the 
 
 `tools/archive/gen_scene_v0.3.py` is the previous generator, kept for reference.
 
+- **Where it runs**: the main color shows where the session is running, so you can see it at a glance:
+
+  | Where | Color |
+  |---|---|
+  | This computer | amber, or the color set in the plugin's **This computer's color** option |
+  | A host reached over SSH | mint |
+  | The cloud | cobalt |
+
+  Give each of your own computers its own color with that option (amber, paper, mint or cobalt).
+  Subagent rings take the three colors the session isn't using. Ember stays the color for errors.
+  The cloud is detected from `CLAUDE_CODE_REMOTE=true`, and SSH from `SSH_CONNECTION` or `SSH_CLIENT`.
+  An SSH session runs Claude Code on the other host, so the theme must be installed there too.
+
 The terminal draws no theme; this only changes the desktop and mobile apps.
 
 ## Changing the backdrop

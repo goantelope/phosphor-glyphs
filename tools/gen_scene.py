@@ -91,7 +91,7 @@ def spin_kf(name, period, deg=360):
     return kf(name, period, [(0, "rotate:0deg"), (period, f"rotate:{deg}deg")])
 
 BASE_CSS = (
-    f"svg{{fill:{AMBER}}}use{{transform-box:fill-box;transform-origin:center}}"
+    f"svg{{fill:var(--g,{AMBER})}}use{{transform-box:fill-box;transform-origin:center}}"
     "@media (prefers-reduced-motion:reduce){*{animation-play-state:paused!important}}"
 )
 
@@ -311,7 +311,7 @@ def agents():
                 r = 18 + c * 14
                 spokes += use(g if c == 0 else "x", math.cos(a) * r, math.sin(a) * r, f"c{c}")
         body = (
-            f'<g class="am" fill="{col}" style="animation-delay:{lp(k / 6 * AGENT_LAP)}">'
+            f'<g class="am" style="fill:var(--k{k % 3},{col});animation-delay:{lp(k / 6 * AGENT_LAP)}">'
             f'<g class="ar" style="animation-delay:{lp(k * 3)}">{spokes}</g>{use("dotbox")}</g>'
         )
         out.append(piece(shared if k == 0 else "", body))

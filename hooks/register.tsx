@@ -1,56 +1,84 @@
 import type { EngineInterface, Register, ThemeSetArgs } from 'claude-code'
 
-import type { Look, Overlay } from '../types'
+import type { Look, Overlay, Phosphor, Place } from '../types'
 import { makeColors } from './make-colors.js'
 import { AGENTS, BASE, BASE_CSS, CYCLE, DEFS, GATHER, H, OVERLAY, W } from './scenes'
 
 // Phosphor Glyphs: the turntable display's look (home_automation, firmware/turntable-display).
-// The roles are the display's phosphor palette (dial_core.h PALETTES): amber P3 is the main colour,
-// ember P12 the "hot" accent, mint P1, cobalt P7. Dark is the CRT at night: warm black glass with
-// amber-white text. Light is P4 "paper" phosphor: the same glyphs on a pale warm screen.
-const { theme, problems } = makeColors({
-  label: 'Phosphor Glyphs',
-  roles: {
-    accent: '#ffa82c', // amber
-    danger: '#ff5a3c', // ember, pushed a little redder so it still reads as danger
-    success: '#5fd68a', // mint, deepened so it reads as green
-    warning: '#ffcc33', // a yellower amber, apart from the accent
-    pro: '#80b0ff', // cobalt
-  },
-  light: {
-    gray: {
-      anchors: {
-        'surface-0': '#ece8dd',
-        'surface-1': '#f2efe6',
-        'surface-2': '#f8f6f0',
-        'text-primary': '#1c160d',
-        'text-secondary': '#463b2b',
-        'text-muted': '#5f5240',
-      },
-    },
-  },
-  dark: {
-    gray: {
-      anchors: {
-        'surface-0': '#0e0b07',
-        'surface-1': '#16120c',
-        'surface-2': '#1d1810',
-        'surface-3': '#241e15',
-        'text-primary': '#ffe6c2',
-        'text-secondary': '#e8c48e',
-        'text-muted': '#b99a6a',
-      },
-    },
-  },
-})
-
-const LOOK: ThemeSetArgs = {
-  colors: theme,
-  backdrop: { scene: 'phosphor-glyphs', glass: { blur: 18, opacity: 0.72 } },
+// The roles are the display's phosphor palette (dial_core.h PALETTES). The main colour says where the
+// session runs: this computer takes the colour its option names (amber unless set), a host reached
+// over SSH is mint, the cloud is cobalt. Ember P12 is always the "hot" accent for errors. Dark is the
+// CRT at night: warm black glass with amber-white text. Light is the same glyphs on P4 "paper".
+const PHOSPHOR: Record<Phosphor, string> = {
+  amber: '#ffa82c', // P3
+  paper: '#ece8dc', // P4
+  mint: '#b8ffce', // P1
+  cobalt: '#80b0ff', // P7
 }
 
+function lookFor(phosphor: Phosphor) {
+  const { theme, problems } = makeColors({
+    label: `Phosphor Glyphs (${phosphor})`,
+    roles: {
+      accent: PHOSPHOR[phosphor],
+      danger: '#ff5a3c', // ember, pushed a little redder so it still reads as danger
+      success: '#5fd68a', // mint, deepened so it reads as green
+      warning: '#ffcc33', // a yellower amber, apart from the accent
+      pro: phosphor === 'cobalt' ? PHOSPHOR.amber : PHOSPHOR.cobalt,
+    },
+    light: {
+      gray: {
+        anchors: {
+          'surface-0': '#ece8dd',
+          'surface-1': '#f2efe6',
+          'surface-2': '#f8f6f0',
+          'text-primary': '#1c160d',
+          'text-secondary': '#463b2b',
+          'text-muted': '#5f5240',
+        },
+      },
+    },
+    dark: {
+      gray: {
+        anchors: {
+          'surface-0': '#0e0b07',
+          'surface-1': '#16120c',
+          'surface-2': '#1d1810',
+          'surface-3': '#241e15',
+          'text-primary': '#ffe6c2',
+          'text-secondary': '#e8c48e',
+          'text-muted': '#b99a6a',
+        },
+      },
+    },
+  })
+  const look: ThemeSetArgs = {
+    colors: theme,
+    backdrop: { scene: 'phosphor-glyphs', glass: { blur: 18, opacity: 0.72 } },
+  }
+  return { look, problems }
+}
+
+const PHOSPHORS = Object.keys(PHOSPHOR) as Phosphor[]
+const isPhosphor = (v: unknown): v is Phosphor => typeof v === 'string' && (PHOSPHORS as string[]).includes(v)
+
+/** Where this session runs, from its environment. */
+async function placeOf($: EngineInterface, thisComputer: Phosphor): Promise<Place> {
+  // Claude Code on the web and other cloud sessions set this
+  if ((await $.env.get('CLAUDE_CODE_REMOTE')) === 'true') {
+    return { where: 'cloud', phosphor: 'cobalt' }
+  }
+  // a session started over SSH (the desktop app's SSH connections, or `claude` in an ssh shell)
+  if ((await $.env.get('SSH_CONNECTION')) !== undefined || (await $.env.get('SSH_CLIENT')) !== undefined) {
+    return { where: 'ssh', phosphor: 'mint' }
+  }
+  return { where: 'local', phosphor: thisComputer }
+}
+
+const WHERE = { local: 'this computer', ssh: 'over SSH', cloud: 'in the cloud' } as const
+
 const ALT = [
-  'Amber glyphs drifting like dust in space',
+  'Glyphs drifting like dust in space',
   'Dust gathering into slowly turning spiral arms of glyphs',
   'A grid of glyph blocks with spiral and ring waves running through it',
   'A turning pinwheel of glyph spokes, waves popping outward',
@@ -59,6 +87,7 @@ const ALT = [
 // ---------- what the session is doing ----------
 
 const LOOK_REF = { plugin: 'phosphor-glyphs', key: 'look' } as const
+const PLACE_REF = { plugin: 'phosphor-glyphs', key: 'place' } as const
 const IDLE: Look = { level: 0, from: 0, levelAt: 0, overlay: 'none', overlayAt: 0, agents: 0 }
 
 const READING = new Set(['Read', 'Grep', 'Glob', 'LS', 'WebFetch', 'WebSearch', 'NotebookRead', 'ToolSearch'])
@@ -116,10 +145,16 @@ async function refresh($: EngineInterface, overlay?: Overlay, replay = false) {
 
 // ---------- drawing ----------
 
+/** The field in the place's colour; subagent rings in the three colours it leaves free. */
+function colours(place: Place): string {
+  const others = PHOSPHORS.filter(p => p !== place.phosphor)
+  return [`--g:${PHOSPHOR[place.phosphor]}`, ...others.map((p, k) => `--k${k}:${PHOSPHOR[p]}`)].join(';')
+}
+
 const GATHER_MS = 2600
 const ONE_SHOT_MS = 3200
 
-function compose(look: Look, now: number): string {
+function compose(look: Look, place: Place, now: number): string {
   const s = (ms: number) => `${(-ms / 1000).toFixed(2)}s`
   const o = s(now % (CYCLE * 1000))
   const sinceLevel = now - look.levelAt
@@ -144,18 +179,23 @@ function compose(look: Look, now: number): string {
   ].join('')
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" style="--o:${o};--e:0s">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" style="--o:${o};--e:0s;${colours(place)}">` +
     `<style>${css}</style>${DEFS}${body}</svg>`
   )
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const thisComputer: Phosphor = isPhosphor(options?.thisComputer) ? options.thisComputer : 'amber'
+
   on('session.start', async ($, e, next) => {
+    const place = await placeOf($, thisComputer)
+    await $.state.set(PLACE_REF, place)
+    const { look, problems } = lookFor(place.phosphor)
     const unpainted = problems.find(line => line.startsWith("Desktop won't paint"))
     if (unpainted !== undefined) {
       $.ui.toast(unpainted)
     }
-    const set = await $.theme.set(LOOK)
+    const set = await $.theme.set(look)
     if (!set.isDrawn) {
       $.ui.status(set.reason)
     }
@@ -216,9 +256,11 @@ export const register: Register = on => {
     }
     const { Svg } = $.ui.resolve(e)
     const look = await current($)
+    const { value: stored } = await $.state.get(PLACE_REF)
+    const place: Place = stored ?? { where: 'local', phosphor: thisComputer }
     const now = await $.clock.now()
     const agents = look.agents > 0 ? `, ${look.agents} subagent ring${look.agents === 1 ? '' : 's'} circling` : ''
 
-    return <Svg source={compose(look, now)} alt={ALT[look.level] + agents} isInteractive />
+    return <Svg source={compose(look, place, now)} alt={`${ALT[look.level]}${agents}, in ${place.phosphor}: ${WHERE[place.where]}`} isInteractive />
   })
 }

@@ -40,6 +40,7 @@
   <div class="grp" id="levels"><span>Level</span></div>
   <div class="grp" id="agents"><span>Subagents</span></div>
   <div class="grp" id="events"><span>Event</span></div>
+  <div class="grp" id="places"><span>Where</span></div>
   <div class="grp"><span>View</span><button id="light">Light</button><button id="glassBtn">Glass panel</button></div>
   <div id="status"></div>
 </div>
@@ -48,6 +49,12 @@ const { AGENTS, BASE, BASE_CSS, CYCLE, DEFS, GATHER, H, OVERLAY, W } = await imp
 
 // Same as compose() in hooks/register.tsx.
 const GATHER_MS = 2600, ONE_SHOT_MS = 3200
+const PHOSPHOR = { amber: '#ffa82c', paper: '#ece8dc', mint: '#b8ffce', cobalt: '#80b0ff' }
+let place = { where: 'local', phosphor: 'amber' }
+function colours(place) {
+  const others = Object.keys(PHOSPHOR).filter(p => p !== place.phosphor)
+  return [`--g:${PHOSPHOR[place.phosphor]}`, ...others.map((p, k) => `--k${k}:${PHOSPHOR[p]}`)].join(';')
+}
 function compose(look, now) {
   const s = ms => `${(-ms / 1000).toFixed(2)}s`
   const o = s(now % (CYCLE * 1000))
@@ -66,7 +73,7 @@ function compose(look, now) {
     agents.map(a => a.body).join(''),
     `<g style="--e:${s(sinceOverlay)}">${overlay.body}</g>`,
   ].join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" style="--o:${o};--e:0s">` +
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" style="--o:${o};--e:0s;${colours(place)}">` +
     `<style>${css}</style>${DEFS}${body}</svg>`
 }
 
@@ -80,6 +87,7 @@ function draw() {
   document.querySelectorAll('#levels button').forEach((b, i) => b.classList.toggle('on', i === look.level))
   document.querySelectorAll('#agents button').forEach((b, i) => b.classList.toggle('on', i === look.agents))
   document.querySelectorAll('#events button').forEach(b => b.classList.toggle('on', b.dataset.o === look.overlay))
+  document.querySelectorAll('#places button').forEach(b => b.classList.toggle('on', b.dataset.p === place.phosphor))
   document.getElementById('status').textContent =
     `${NAMES[look.level]} · ${look.agents} subagent${look.agents === 1 ? '' : 's'} · event: ${look.overlay}`
 }
@@ -104,6 +112,12 @@ const mk = (parent, label, fn, data) => {
 NAMES.forEach((n, i) => mk('levels', `${i} ${n}`, () => setLevel(i)))
 for (let n = 0; n <= 6; n++) mk('agents', String(n), () => setAgents(n))
 for (const o of ['none', 'scan', 'write', 'run', 'error', 'done']) mk('events', o, () => setOverlay(o), o)
+for (const [label, p] of [['this Mac', { where: 'local', phosphor: 'amber' }], ['other computer', { where: 'local', phosphor: 'paper' }],
+  ['SSH', { where: 'ssh', phosphor: 'mint' }], ['cloud', { where: 'cloud', phosphor: 'cobalt' }]]) {
+  const b = document.createElement('button'); b.textContent = label; b.dataset.p = p.phosphor
+  b.onclick = () => { place = p; document.documentElement.style.setProperty('--accent', PHOSPHOR[p.phosphor]); draw() }
+  document.getElementById('places').append(b)
+}
 
 document.getElementById('light').onclick = e => { document.body.classList.toggle('light'); e.target.classList.toggle('on') }
 document.getElementById('glassBtn').onclick = e => { document.body.classList.toggle('glass'); e.target.classList.toggle('on') }
@@ -143,6 +157,7 @@ const q = new URLSearchParams(location.search)
 if (q.has('level')) Object.assign(look, { level: +q.get('level'), from: +q.get('level') })
 if (q.has('agents')) look.agents = +q.get('agents')
 if (q.has('overlay')) look.overlay = q.get('overlay')
+if (q.has('place')) place = { where: 'local', phosphor: q.get('place') }
 if (q.has('bare')) document.getElementById('bar').style.display = 'none'
 if (q.has('glass')) document.body.classList.add('glass')
 draw()

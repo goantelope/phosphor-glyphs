@@ -1,1 +1,20 @@
-{ "name": "phosphor-glyphs", "version": "0.4.0", "description": "A theme from the turntable display's glyph visualizer: amber phosphor colors and a glyph backdrop that moves with what the session is doing.", "types": "./types/index.d.ts" }
+{
+  "name": "phosphor-glyphs",
+  "version": "0.5.0",
+  "description": "A theme from the turntable display's glyph visualizer: phosphor colors that show where the session runs, and a glyph backdrop that moves with what it is doing.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "thisComputer": {
+      "type": "string",
+      "title": "This computer's color",
+      "description": "The phosphor color for sessions running on this computer. Cloud sessions are always cobalt and SSH sessions mint, so pick another for each of your own computers.",
+      "options": [
+        "amber",
+        "paper",
+        "mint",
+        "cobalt"
+      ],
+      "default": "amber"
+    }
+  }
+}
